@@ -37,8 +37,7 @@ class downStep(nn.Module):
 
         super(downStep, self).__init__()
         # todo
-        self.conv = nn.Sequential(
-            nn.Conv2d(inC, outC, kernel_size=3, padding=0, stride=1),
+        self.conv = nn.Sequential(nn.Conv2d(inC, outC, kernel_size=3, padding=0, stride=1),
             nn.ReLU(),
             nn.BatchNorm2d(outC),
             nn.Conv2d(outC, outC, kernel_size=3, padding=0, stride=1),
@@ -49,8 +48,8 @@ class downStep(nn.Module):
     def forward(self, x):
         # todo
         x = self.conv(x)
-        pool_x = self.pool(x)
-        return pool_x,x
+        x2 = self.pool(x)
+        return x2,x
 
 class upStep(nn.Module):
     def __init__(self, inC, outC, withReLU=True):
@@ -71,11 +70,7 @@ class upStep(nn.Module):
         # todo
         x = self.transpose(x)
         x_down = x_down[:, :, int((x_down.shape[2] - x.shape[2]) / 2):int((x_down.shape[2] + x.shape[2]) / 2),
-                              int((x_down.shape[3] - x.shape[2]) / 2):int((x_down.shape[3] + x.shape[2]) / 2)]
-        x = torch.cat([x, x_down],dim=1)
+                int((x_down.shape[3] - x.shape[2]) / 2):int((x_down.shape[3] + x.shape[2]) / 2)]
+        x = torch.cat([x, x_down], dim=1)
         x = self.conv(x)
         return x
-
-
-
-

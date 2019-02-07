@@ -21,7 +21,7 @@ def train_net(net,
               epochs=5,
               data_dir='data/cells/',
               n_classes=2,
-              lr=0.1,
+              lr=0.001,
               val_percent=0.1,
               save_cp=True,
               gpu=False):
@@ -35,7 +35,7 @@ def train_net(net,
     optimizer = optim.SGD(net.parameters(),
                             lr=lr,
                             momentum=0.99,
-                            weight_decay=0.0005)
+                            weight_decay=0.00005)
 
 
     for epoch in range(epochs):
@@ -53,32 +53,41 @@ def train_net(net,
             img_tensor = torch.from_numpy(img.reshape(1,1,shape[0],shape[1])).float()  # Convert numpy array to tensor
             shape1=img_tensor.shape
             mask_tensor=label.shape
-            #mask_tensor = torch.from_numpy(label.reshape(1,label_shape[0],label_shape[1])).long()
-            #mask_tensor=mask_tensor.cpu().detach().numpy().squeeze(0)
-            #mask_tensor=[t.numpy() for t in mask_tensor]
-            #shape2=mask_tensor.shape
+            label_tensor = torch.from_numpy(label.reshape(1, mask_tensor[0], mask_tensor[1])).long()
+            shape2=label_tensor.shape
+
             # todo: load image tensor to gpu
-            #if gpu:
+            if gpu:
+                img_torch = img_tensor.cuda()
+                label_torch=label_tensor.cuda()
 
             # todo: get prediction and getLoss()
-            images=Variable(img_tensor)
-            #mask=Variable(label)
 
 
-            pred_img=net(images)
+            pred_img=net(img_torch)
             shape3=pred_img.shape
 
-            #pred_ssm=softmax(pred_img)
-            #_,pred_ssm=torch.max(pred_ssm,1)
-            #pred_ssm.shape
-
-            #loss = criterion(pred, mask)
+            #loss = criterion(pred_img, label_torch)
+            #print(loss)
             loss=getLoss(pred_img,label)
+            print(loss)
 
             optimizer.zero_grad()
             loss.backward()
             optimizer.step() #Update the weights
             epoch_loss += loss.item()
+
+
+            pred_ssm=softmax(pred_img)
+            _,pred_label=torch.max(pred_ssm,1)
+
+            plt.subplot(1, 3, 1)
+            plt.imshow(img * 255.)
+            plt.subplot(1, 3, 2)
+            plt.imshow((label) * 255.)
+            plt.subplot(1, 3, 3)
+            plt.imshow(pred_label.cpu().data.numpy().squeeze() * 255.)
+            plt.show()
  
             print('Training sample %d / %d - Loss: %.6f' % (i+1, N_train, loss.item()))
 
@@ -92,7 +101,7 @@ def train_net(net,
     loader.setMode('test')
     net.eval()
     with torch.no_grad():
-        for _, (img, label) in enumerate(loader):
+        for j, (img, label) in enumerate(loader):
             shape = img.shape
             img_torch = torch.from_numpy(img.reshape(1,1,shape[0],shape[1])).float()
             if gpu:
@@ -109,15 +118,17 @@ def train_net(net,
             plt.imshow(pred_label.cpu().detach().numpy().squeeze()*255.)
             plt.show()
 
+            print('Testing sample %d / %d - Loss: %.6f' % (j + 1, N_train, loss.item()))
+
 def getLoss(pred_label, target_label):
     p = softmax(pred_label)
     return cross_entropy(p, target_label)
 
 def softmax(input):
     # todo: implement softmax function
-    p=input.exp() / (input.exp().sum())
+    #p=input.exp() / (input.exp().sum())
     exp=torch.exp(input)
-    p=exp/torch.sum(exp)
+    p=exp/torch.sum(exp,dim=1)
     return p
 
 def cross_entropy(input, targets):
@@ -126,8 +137,8 @@ def cross_entropy(input, targets):
     p=choose(input,targets)
     m=targets.shape[0]
     #p=softmax(input)
-    log_likelihood = -torch.log(p[range(m), targets])
-    ce = torch.sum(log_likelihood) / m
+    log_likelihood = -torch.log(p)
+    ce = torch.sum(log_likelihood) / (m*m)
     return ce
 
 # Workaround to use numpy.choose() with PyTorch
@@ -158,7 +169,7 @@ def get_args():
 if __name__ == '__main__':
     args = get_args()
 
-    net = UNet(n_classes=args.n_classes)
+    net = UNet(n_classes=args.n_classes).cuda()
 
     if args.load:
         net.load_state_dict(torch.load(args.load))

@@ -3,9 +3,12 @@ from os.path import isdir, exists, abspath, join
 
 import random
 from random import randint
-
+import matplotlib.pyplot as plt
 import numpy as np
-from PIL import Image
+from PIL import Image,ImageEnhance
+from scipy.ndimage.interpolation import map_coordinates
+from scipy.ndimage.filters import gaussian_filter
+import torchvision
 
 class DataLoader():
     def __init__(self, root_dir='data', batch_size=2, test_percent=.1):
@@ -32,7 +35,7 @@ class DataLoader():
             endId = len(self.data_files)
 
         while current < endId:
-            current += 1
+
 
             # todo: load images and labels
             # hint: scale images between 0 and 1
@@ -41,51 +44,43 @@ class DataLoader():
             #GET IMAGE
             single_image_name = self.data_files[current]
             img_as_img = Image.open(single_image_name)
-            img_as_np = np.asarray(img_as_img)
-            input_size=572
-            output_size=388
-
-            # Augmentation
-            # flip {0: vertical, 1: horizontal, 2: both, 3: none}
-            flip_num = randint(0, 3)
-            #img_as_np = dataAugumentation(img_as_np, flip_num)
-
-            if flip_num == 0:
-                # vertical
-                img_as_np = np.flip(img_as_np, flip_num)
-            elif flip_num == 1:
-                # horizontal
-                imaimg_as_npge = np.flip(img_as_np, flip_num)
-            elif flip_num == 2:
-                # horizontally and vertically flip
-                img_as_np = np.flip(img_as_np, 0)
-                img_as_np = np.flip(img_as_np, 1)
-            else:
-                img_as_np = img_as_np
-                # no effect
-            #return img_as_np
 
             # Crop the image
-            img_height, img_width = img_as_np.shape[0], img_as_np.shape[1]
-            pad_size = int((input_size-output_size) / 2)
-            img_as_np = np.pad(img_as_np, pad_size, mode="symmetric")
-            y_loc, x_loc = randint(0, img_height - output_size), randint(0, img_width - output_size)
+            img_as_np = img_as_img.resize((572, 572))
 
-            #img_as_np = cropping(img_as_np, crop_size=input_size, dim1=y_loc, dim2=x_loc)
-            img_as_np = img_as_np[y_loc:y_loc + input_size, x_loc:x_loc + input_size]
+            #Data Augumentation
+            data_image=self.applyDataAugmentation(img_as_np)
+            data_image=np.divide(np.asarray(data_image,dtype=np.float32),255.)
+            #img_as_np = np.asarray(data_image)
+            #data_image = (img_as_np - np.min(img_as_np)) / (np.max(img_as_np) - np.min(img_as_np)) * 255.
+
+
+            #Mirroring the image
+            img_crop = (3 * 572 - 572) // 2
+            img_flip=np.flipud(data_image)
+            img_rot=np.rot90(data_image,k=1,axes=(0,1))
+            concat1=np.concatenate((np.flipud(img_rot),img_flip,np.flipud(img_rot)),axis=1)
+            concat2 = np.concatenate((img_rot, data_image, img_rot), axis=1)
+            concat3 = np.concatenate((np.flipud(img_rot), img_flip, np.flipud(img_rot)), axis=1)
+            concat_image=np.concatenate((concat1,concat2,concat3),axis=0)
+            dim1,dim2=concat_image.shape
+            data_image=concat_image[img_crop:dim1-572, 572:dim2-572]
+            #data_image=data_image.resize((572,572))
 
             #Normalization of the image
-            data_image = (img_as_np - np.min(img_as_np)) * (1 - 0) / (np.max(img_as_np) - np.min(img_as_np)) + 0
-            #data_image = normalization2(img_as_np, max=1, min=0)
+            data_image = (data_image - np.min(data_image)) / (np.max(data_image) - np.min(data_image))*255
 
             #GET MASK-LABELS
             single_mask_name = self.label_files[current]
+            current += 1
             msk_as_img = Image.open(single_mask_name)
-            msk_as_np = np.asarray(msk_as_img)
+
 
             #Cropping the mask
-            #label_image = cropping(msk_as_np, crop_size=self.out_size, dim1=y_loc, dim2=x_loc)
-            label_image = msk_as_np[y_loc:y_loc + output_size, x_loc:x_loc + output_size]
+            label_image=msk_as_img.resize((388,388))
+            label_image = self.applyDataAugmentation(label_image)
+            label_image = np.asarray(label_image,dtype=np.float32)
+
 
             #Mask should be in 0 and 1 Hence no normalization for Mask
             yield (data_image, label_image)
@@ -97,17 +92,14 @@ class DataLoader():
         data_length = len(self.data_files)
         return np.int_(data_length - np.floor(data_length * self.test_percent))
 
-    def cropping(image, crop_size, dim1, dim2):
-        """crop the image and pad it to in_size
-        Args :
-            images : numpy array of images
-            crop_size(int) : size of cropped image
-            dim1(int) : vertical location of crop
-            dim2(int) : horizontal location of crop
-        Return :
-            cropped_img: numpy array of cropped image
-        """
-        cropped_img = image[dim1:dim1 + crop_size, dim2:dim2 + crop_size]
-        return cropped_img
+    def applyDataAugmentation(self, img):
+
+        # Add the Brightness for the image, add the Horizontal flip, Vertical Flip
+        self.img_as_np = torchvision.transforms.functional.adjust_hue(img, 0.5)
+        self.img_as_np = torchvision.transforms.functional.hflip(self.img_as_np)
+        self.img_as_np = torchvision.transforms.functional.vflip(self.img_as_np)
+        return self.img_as_np
+
+
 
 
